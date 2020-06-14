@@ -33,7 +33,7 @@ from pytorch_i3d import InceptionI3d
 from charades_dataset import Charades as Dataset
 
 
-def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='charades/charades.json', batch_size=8*5): #, save_model=''):
+def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades.json', batch_size=8*5): #, save_model=''):
     # setup dataset
     train_transforms = transforms.Compose([videotransforms.RandomCrop(224),
                                            videotransforms.RandomHorizontalFlip(),
@@ -73,8 +73,8 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
     steps = 0
     # train it
     while steps < max_steps:#for epoch in range(num_epochs):
-        print 'Step {}/{}'.format(steps, max_steps)
-        print '-' * 10
+        print ('Step {}/{}'.format(steps, max_steps))
+        print ('-' * 10)
 
         # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
@@ -123,15 +123,15 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                     optimizer.zero_grad()
                     lr_sched.step()
                     if steps % 10 == 0:
-                        print '{} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f}'.format(phase, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10)
+                        print ('{} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f}'.format(phase, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10))
                         # save model
                         torch.save(i3d.module.state_dict(), save_model+str(steps).zfill(6)+'.pt')
                         tot_loss = tot_loc_loss = tot_cls_loss = 0.
             if phase == 'val':
-                print '{} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f}'.format(phase, tot_loc_loss/num_iter, tot_cls_loss/num_iter, (tot_loss*num_steps_per_update)/num_iter) 
+                print ('{} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f}'.format(phase, tot_loc_loss/num_iter, tot_cls_loss/num_iter, (tot_loss*num_steps_per_update)/num_iter)) 
     
 
 
 if __name__ == '__main__':
     # need to add argparse
-    run(mode=args.mode, root=args.root #, save_model=args.save_model)
+    run(mode=args.mode, root=args.root) #, save_model=args.save_model)

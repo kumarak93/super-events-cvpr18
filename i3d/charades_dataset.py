@@ -63,30 +63,39 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    i = 0
-    for vid in data.keys():
-        if data[vid]['subset'] != split:
-            continue
+    pre_data_file = split_file[:-5]+'_'+split+'labeldata.npy'
+    if os.path.exists(pre_data_file):
+        print('{} exists'.format(pre_data_file))
+        dataset = np.load(pre_data_file, allow_pickle=True)
+    else:
+        print('{} does not exist'.format(pre_data_file))
+        i = 0
+        for vid in data.keys():
+            if data[vid]['subset'] != split:
+                continue
 
-        if not os.path.exists(os.path.join(root, vid)):
-            continue
-        num_frames = len(os.listdir(os.path.join(root, vid)))
-        if mode == 'flow':
-            num_frames = num_frames//2
-            
-        if num_frames < 66:
-            continue
+            if not os.path.exists(os.path.join(root, vid)):
+                continue
+            num_frames = len(os.listdir(os.path.join(root, vid)))
+            if mode == 'flow':
+                num_frames = num_frames//2
+                
+            if num_frames < 66:
+                continue
 
-        label = np.zeros((num_classes,num_frames), np.float32)
+            label = np.zeros((num_classes,num_frames), np.float32)
 
-        fps = num_frames/data[vid]['duration']
-        for ann in data[vid]['actions']:
-            for fr in range(0,num_frames,1):
-                if fr/fps > ann[1] and fr/fps < ann[2]:
-                    label[ann[0], fr] = 1 # binary classification
-        dataset.append((vid, label, data[vid]['duration'], num_frames))
-        i += 1
+            fps = num_frames/data[vid]['duration']
+            for ann in data[vid]['actions']:
+                for fr in range(0,num_frames,1):
+                    if fr/fps > ann[1] and fr/fps < ann[2]:
+                        label[ann[0], fr] = 1 # binary classification
+            dataset.append((vid, label, data[vid]['duration'], num_frames))
+            i += 1
+            print(i, vid)
+        np.save(pre_data_file, dataset)
     
+    print('dataset size:%d'%len(dataset))
     return dataset
 
 

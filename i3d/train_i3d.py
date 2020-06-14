@@ -61,6 +61,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
         i3d.load_state_dict(torch.load('models/rgb_imagenet.pt'))
         save_model = 'models/rgb_temp_'
     i3d.replace_logits(157)
+    i3d.freeze('Mixed_5c')
     #i3d.load_state_dict(torch.load('/ssd/models/000920.pt'))
     i3d.cuda()
     i3d = nn.DataParallel(i3d)

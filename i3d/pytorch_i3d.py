@@ -329,7 +329,12 @@ class InceptionI3d(nn.Module):
             logits = x.squeeze(3).squeeze(3)
         # logits is batch X time X classes, which is what we want to work with
         return logits
-        
+    
+    def freeze(self, layer):
+        for end_point in self.VALID_ENDPOINTS[:self.VALID_ENDPOINTS.index(layer)+1]:
+            if end_point in self.end_points:
+                print(end_point)
+                self._modules[end_point].requires_grad = False   
 
     def extract_features(self, x):
         for end_point in self.VALID_ENDPOINTS:

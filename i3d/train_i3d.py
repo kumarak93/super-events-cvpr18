@@ -24,7 +24,7 @@ from torch.autograd import Variable
 import torchvision
 from torchvision import datasets, transforms
 import videotransforms
-
+from torchsummary import summary
 
 import numpy as np
 from barbar import Bar
@@ -42,10 +42,10 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
     test_transforms = transforms.Compose([videotransforms.CenterCrop(224)])
 
     dataset = Dataset(train_split, 'training', root, mode, train_transforms)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1, pin_memory=True)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
 
     val_dataset = Dataset(train_split, 'testing', root, mode, test_transforms)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=1, pin_memory=True)    
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)    
 
     dataloaders = {'train': dataloader, 'val': val_dataloader}
     datasets = {'train': dataset, 'val': val_dataset}
@@ -61,9 +61,16 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
         i3d.load_state_dict(torch.load('models/rgb_imagenet.pt'))
         save_model = 'models/rgb_temp_'
     i3d.replace_logits(157)
-    i3d.freeze('Mixed_5c')
     #i3d.load_state_dict(torch.load('/ssd/models/000920.pt'))
     i3d.cuda()
+
+    #i3d.freeze('Mixed_5c')
+    
+    for name, param in i3d.named_parameters():
+        if param.requires_grad:print('updating: {}'.format(name))
+        #else:print('frozen: {}'.format(name))
+    
+    #summary(i3d, (3, 64, 224, 224))
     i3d = nn.DataParallel(i3d)
     print('model loaded')
 
@@ -94,11 +101,12 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
             
             # Iterate over data.
             print(phase)
-            for data in dataloaders[phase]:
+            for data in Bar(dataloaders[phase]):
                 num_iter += 1
-                print(num_iter)
+                #print(num_iter)
                 # get the inputs
                 inputs, labels = data
+                #print(inputs.shape, labels.shape) #(B Ch=3 T=64 H=224 W=224) (B C=157 T)
 
                 # wrap them in Variable
                 inputs = Variable(inputs.cuda())
@@ -128,7 +136,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                     optimizer.zero_grad()
                     lr_sched.step()
                     if steps % 10 == 0:
-                        print ('{} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f}'.format(phase, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10))
+                        print ('{} steps: {} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f}'.format(phase, steps, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10))
                         # save model
                         torch.save(i3d.module.state_dict(), save_model+str(steps).zfill(6)+'.pt')
                         tot_loss = tot_loc_loss = tot_cls_loss = 0.

@@ -333,8 +333,9 @@ class InceptionI3d(nn.Module):
     def freeze(self, layer):
         for end_point in self.VALID_ENDPOINTS[:self.VALID_ENDPOINTS.index(layer)+1]:
             if end_point in self.end_points:
-                print(end_point)
-                self._modules[end_point].requires_grad = False   
+                #print(end_point)
+                for _, param in self._modules[end_point].named_parameters():
+                    param.requires_grad = False   
 
     def extract_features(self, x):
         for end_point in self.VALID_ENDPOINTS:

@@ -147,7 +147,7 @@ def eval_model(model, dataloader, baseline=False):
         results[other[0][0]] = (outputs.data.cpu().numpy()[0], probs.data.cpu().numpy()[0], data[2].numpy()[0], fps)
     return results
 
-
+'''
 def similarity_loss(super_events_1, super_events_2, labels, mask):
     #classes =torch.cat([torch.sum(F.one_hot(torch.unique(torch.where(labels[i]==1)[1]), 
     #    num_classes=labels.shape[-1]), dim=0).view(1,-1) for i in range(0,labels.shape[0])], dim=-1).float() # B C
@@ -173,7 +173,7 @@ def similarity_loss(super_events_1, super_events_2, labels, mask):
 
     sim_loss = F.mse_loss(emb_sim, gt_sim)
     return sim_loss
-
+'''
 
 def run_network(model, data, gpu, baseline=False, reg_margin=0):
     # get the inputs
@@ -202,7 +202,7 @@ def run_network(model, data, gpu, baseline=False, reg_margin=0):
         #outputs = model(inputs)
         outputs, super_events_1, super_events_2 = model(inputs)
     
-    sim_loss = similarity_loss(super_events_1, super_events_2, labels, mask)
+    #sim_loss = similarity_loss(super_events_1, super_events_2, labels, mask)
 
     outputs = outputs.squeeze(3).squeeze(3).permute(0,2,1) #.cpu() # remove spatial dims
     ##outputs = outputs.permute(0,2,1) # remove spatial dims

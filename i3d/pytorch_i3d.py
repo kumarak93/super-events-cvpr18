@@ -291,7 +291,7 @@ class InceptionI3d(nn.Module):
 
         end_point = 'Logits'
         self.avg_pool = nn.AvgPool3d(kernel_size=[2, 1, 1],
-                                     stride=(1, 1, 1)) # 2 7 7
+                                     stride=(2, 7, 7)) # (2 7 7) --> (1 1 1) --> (2 1 1)
         self.dropout = nn.Dropout(dropout_keep_prob)
         self.logits = Unit3D(in_channels=384+384+128+128, output_channels=self._num_classes,
                              kernel_shape=[1, 1, 1],

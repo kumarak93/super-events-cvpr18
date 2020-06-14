@@ -1,15 +1,17 @@
 import os
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   
+#os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   
 #os.environ["CUDA_VISIBLE_DEVICES"]='0,1,2,3'
 import sys
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-mode', type=str, help='rgb or flow')
-parser.add_argument('-save_model', type=str)
-parser.add_argument('-root', type=str)
+parser.add_argument('-mode', type=str, default='rgb', help='rgb or flow')
+#parser.add_argument('-save_model', type=str)
+parser.add_argument('-root', default='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', type=str)
+parser.add_argument('-gpu', default='0', type=str)
 
 args = parser.parse_args()
+os.environ["CUDA_VISIBLE_DEVICES"]=args.gpu
 
 
 import torch
@@ -31,7 +33,7 @@ from pytorch_i3d import InceptionI3d
 from charades_dataset import Charades as Dataset
 
 
-def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/ssd/Charades_v1_rgb', train_split='charades/charades.json', batch_size=8*5, save_model=''):
+def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='charades/charades.json', batch_size=8*5): #, save_model=''):
     # setup dataset
     train_transforms = transforms.Compose([videotransforms.RandomCrop(224),
                                            videotransforms.RandomHorizontalFlip(),
@@ -52,9 +54,11 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/ssd/Charades_v1_rgb', tr
     if mode == 'flow':
         i3d = InceptionI3d(400, in_channels=2)
         i3d.load_state_dict(torch.load('models/flow_imagenet.pt'))
+        save_model = 'models/flow_temp_'
     else:
         i3d = InceptionI3d(400, in_channels=3)
         i3d.load_state_dict(torch.load('models/rgb_imagenet.pt'))
+        save_model = 'models/rgb_temp_'
     i3d.replace_logits(157)
     #i3d.load_state_dict(torch.load('/ssd/models/000920.pt'))
     i3d.cuda()
@@ -130,4 +134,4 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/ssd/Charades_v1_rgb', tr
 
 if __name__ == '__main__':
     # need to add argparse
-    run(mode=args.mode, root=args.root, save_model=args.save_model)
+    run(mode=args.mode, root=args.root #, save_model=args.save_model)

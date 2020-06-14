@@ -87,6 +87,7 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
 
             fps = num_frames/data[vid]['duration']
             for ann in data[vid]['actions']:
+                #label[ann[0], int(np.ceil(ann[1]*fps)):min(int(np.ceil(ann[2]*fps)),num_frames)] = 1
                 for fr in range(0,num_frames,1):
                     if fr/fps > ann[1] and fr/fps < ann[2]:
                         label[ann[0], fr] = 1 # binary classification

@@ -23,31 +23,46 @@ def video_to_tensor(pic):
     return torch.from_numpy(pic.transpose([3,0,1,2]))
 
 
-
 def make_dataset(split_file, split, root, num_classes=157):
-    dataset = []
+
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    i = 0
-    for vid in data.keys():
-        if data[vid]['subset'] != split:
-            continue
-
-        if not os.path.exists(os.path.join(root, vid+'.npy')):
-            continue
-        fts = np.load(os.path.join(root, vid+'.npy'))
-        num_feat = fts.shape[0]
-        label = np.zeros((num_feat,num_classes), np.float32)
-
-        fps = num_feat/data[vid]['duration']
-        for ann in data[vid]['actions']:
-            for fr in range(0,num_feat,1):
-                if fr/fps > ann[1] and fr/fps < ann[2]:
-                    label[fr, ann[0]] = 1 # binary classification
-        dataset.append((vid, label, data[vid]['duration']))
-        i += 1
+    pre_data_file = split_file.split('.')[0]+'_'+root.split('_')[-2]+'_'+split+'_corrected_dataset.npy' #dataset_temp
+    #pre_data_file = split_file.split('.')[0]+'_'+root.split('_')[-2]+'_'+split+'_temp.npy'
+    print(pre_data_file)
+    if os.path.exists(pre_data_file):
+        print(pre_data_file)
+        dataset = np.load(pre_data_file, allow_pickle=True)
+        #dataset = json.load(open(pre_data_file, 'r'))
+    else:
     
+        dataset = []
+        i = 0
+        for vid in data.keys():
+            if data[vid]['subset'] != split:
+                continue
+
+            if not os.path.exists(os.path.join(root, vid+'.npy')):
+                continue
+            fts = np.load(os.path.join(root, vid+'.npy'))
+            num_feat = fts.shape[0]
+            label = np.zeros((num_feat,num_classes), np.float32)
+
+            fps = num_feat/data[vid]['duration']
+            for ann in data[vid]['actions']:
+                for fr in range(0,num_feat,1):
+                    if fr/fps > ann[1] and fr/fps < ann[2]:
+                        label[fr, ann[0]] = 1 # binary classification
+            dataset.append((vid, label, data[vid]['duration']))
+            i += 1
+            print(i, vid)
+            #if i==100:
+            #    break
+        np.save(pre_data_file, dataset)
+        #json.dump(dataset, open(pre_data_file, 'w'))
+    
+    print('dataset size:%d'%len(dataset))
     return dataset
 
 # make_dataset('multithumos.json', 'training', '/ssd2/thumos/val_i3d_rgb')
@@ -70,18 +85,24 @@ class MultiThumos(data_utl.Dataset):
         Returns:
             tuple: (image, target) where target is class_index of the target class.
         """
+        #if index<200: return np.zeros((1,1,1,1)),np.zeros((1,1,1,1)),np.zeros((1,1,1,1)),np.zeros((1,1,1,1))
         entry = self.data[index]
         if entry[0] in self.in_mem:
             feat = self.in_mem[entry[0]]
         else:
             feat = np.load(os.path.join(self.root, entry[0]+'.npy'))
-            feat = feat.reshape((feat.shape[0],1,1,1024))
+            #print(feat.shape)
+            #feat = feat.reshape((feat.shape[0],7,7,1024)).mean(axis=(1,2), keepdims=True) ##### 1D
+            feat = feat.reshape((feat.shape[0],7,7,1024))
             #r = np.random.randint(0,10)
             #feat = feat[:,r].reshape((feat.shape[0],1,1,1024))
             feat = feat.astype(np.float32)
             #self.in_mem[entry[0]] = feat
             
         label = entry[1]
+        #print(feat.shape, label.shape, [entry[0], entry[2]])
+        #print(feat[0,:,:,:][None,...].repeat(900, axis=0).shape, label[0,:][None,...].repeat(900, axis=0).shape)
+        #return feat[0,:,:,:][None,...].repeat(900, axis=0), label[0,:][None,...].repeat(900, axis=0), [entry[0], entry[2]]
         return feat, label, [entry[0], entry[2]]
 
     def __len__(self):

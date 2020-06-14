@@ -28,6 +28,7 @@ from torchsummary import summary
 
 import numpy as np
 from barbar import Bar
+from apmeter import APMeter
 
 from pytorch_i3d import InceptionI3d
 
@@ -81,6 +82,8 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
 
     num_steps_per_update = 4 # accum gradient
     steps = 0
+    val_apm = APMeter()
+    tr_apm = APMeter()
     # train it
     while steps < max_steps:#for epoch in range(num_epochs):
         print ('Step {}/{}'.format(steps, max_steps))
@@ -116,6 +119,14 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 per_frame_logits = i3d(inputs)
                 # upsample to input size
                 per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
+                probs = F.sigmoid(per_frame_logits)
+
+                if phase == 'train':
+                    for b in range(labels.shape[0]):
+                        tr_apm.add(probs[b].detach().cpu().numpy(), labels[b].cpu().numpy())
+                else:
+                    for b in range(labels.shape[0]):
+                        val_apm.add(probs[b].detach().cpu().numpy(), labels[b].cpu().numpy())
 
                 # compute localization loss
                 loc_loss = F.binary_cross_entropy_with_logits(per_frame_logits, labels)
@@ -136,12 +147,19 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                     optimizer.zero_grad()
                     lr_sched.step()
                     if steps % 10 == 0:
-                        print ('{} steps: {} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f}'.format(phase, steps, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10))
+                        tr_map = tr_apm.value().mean()
+                        print ('{} steps: {} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f} mAP: {:.4f}'.format(phase, 
+                            steps, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10, tr_map))
                         # save model
                         torch.save(i3d.module.state_dict(), save_model+str(steps).zfill(6)+'.pt')
                         tot_loss = tot_loc_loss = tot_cls_loss = 0.
+                    if steps % 100 == 0:
+                        tr_apm.reset()
             if phase == 'val':
-                print ('{} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f}'.format(phase, tot_loc_loss/num_iter, tot_cls_loss/num_iter, (tot_loss*num_steps_per_update)/num_iter)) 
+                val_map = val_apm.value().mean()
+                val_apm.reset()
+                print ('{} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f} mAP: {:.4f}'.format(phase, 
+                    tot_loc_loss/num_iter, tot_cls_loss/num_iter, (tot_loss*num_steps_per_update)/num_iter, val_map)) 
     
 
 

@@ -34,6 +34,8 @@ from pytorch_i3d import InceptionI3d
 
 from charades_dataset import Charades as Dataset
 
+import warnings
+warnings.filterwarnings("ignore")
 
 def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades.json', batch_size=8): #, save_model=''):
     # setup dataset
@@ -64,7 +66,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
         state = i3d.state_dict()
         state.update(torch.load('models/rgb_charades.pt'))
         i3d.load_state_dict(state)
-        save_model = 'models/rgb_temp_'
+        save_model = 'models/rgb_temp_attnT_'
     #i3d.replace_logits(157)
     #i3d.load_state_dict(torch.load('/ssd/models/000920.pt'))
     i3d.cuda()
@@ -152,6 +154,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                     lr_sched.step()
                     if steps % 10 == 0:
                         tr_map = tr_apm.value().mean()
+                        i3d.module.get_attn_para() #### print mu, sigma
                         print ('{} steps: {} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f} mAP: {:.4f}'.format(phase, 
                             steps, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10, tr_map))
                         # save model

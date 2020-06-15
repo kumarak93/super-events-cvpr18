@@ -10,7 +10,7 @@ import sys
 from collections import OrderedDict
 
 import attn_t as attn
-
+np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 class MaxPool3dSamePadding(nn.MaxPool3d):
     
@@ -361,6 +361,10 @@ class InceptionI3d(nn.Module):
             logits = x.squeeze(3).squeeze(3)
         # logits is batch X time X classes, which is what we want to work with
         return logits
+
+    def get_attn_para(self):
+        attn = self._modules['Skip_Mixed_3'].attn
+        print(torch.tanh(attn.mu_t).detach().cpu().numpy(), torch.sigmoid(attn.sigma_t).detach().cpu().numpy())
     
     def freeze(self, layer):
         for end_point in self.VALID_ENDPOINTS[:self.VALID_ENDPOINTS.index(layer)+1]:

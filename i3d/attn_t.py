@@ -32,9 +32,10 @@ class AttnLayer(nn.Module):
 
         video = inp #video, length = inp
         batch, channels, time, width, height = video.size()
-        vid = video.unsqueeze(2).repeat(1,1,self.Ni,time,1,1) # B C N T W H
+        vid = video.unsqueeze(2).repeat(1,1,self.Ni,1,1,1) # B C N T W H
         f = self.get_filters(torch.tanh(self.mu_t), torch.sigmoid(self.sigma_t), time)
         f = f.view(1,1,self.Ni,time,1,1) # 1 1 N T 1 1
+        #print(vid.shape, f.shape)
         o = torch.sum(f*vid, dim=2) # B C T W H
         return o
 

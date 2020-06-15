@@ -160,8 +160,8 @@ class SkipAttention(nn.Module):
                          name=name+'_Conv')
         self.name = name
 
-    def forward(self, x):    
-        x = self.attn(x)
+    def forward(self, inp):    
+        x = self.attn(inp)
         x = self.conv(x)
         return x
 
@@ -345,13 +345,14 @@ class InceptionI3d(nn.Module):
         for k in self.end_points.keys():
             self.add_module(k, self.end_points[k])
         
-    def forward(self, x):
+    def forward(self, inp):
+        x, meta = inp
         for end_point in self.VALID_ENDPOINTS:
             if end_point in self.end_points:
                 if end_point not in ['Skip_Mixed_3', 'MaxPool3d_4a_3x3']:
                     x = self._modules[end_point](x) # use _modules to work with dataparallel
                 elif end_point == 'Skip_Mixed_3':
-                    x_skip = self._modules[end_point](x)
+                    x_skip = self._modules[end_point]([x, meta])
                 elif end_point == 'MaxPool3d_4a_3x3':
                     x = self._modules[end_point](x + x_skip)
                     

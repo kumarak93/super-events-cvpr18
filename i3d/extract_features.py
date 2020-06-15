@@ -74,7 +74,7 @@ def run(max_steps=64e3, mode='flow', root='../../charades/Charades_v1_flow', spl
                 continue
 
             b,c,t,h,w = inputs.shape
-            size_t=200
+            size_t=200 #1600
             if t > size_t:
                 #print('split')
                 features = []

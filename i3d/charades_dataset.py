@@ -63,7 +63,7 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    pre_data_file = split_file[:-5]+'_'+split+'labeldata.npy'
+    pre_data_file = split_file[:-5]+'_'+split+'labeldata_temp.npy'
     if os.path.exists(pre_data_file):
         print('{} exists'.format(pre_data_file))
         dataset = np.load(pre_data_file, allow_pickle=True)
@@ -129,7 +129,9 @@ class Charades(data_utl.Dataset):
 
         imgs = self.transforms(imgs)
 
-        return video_to_tensor(imgs), torch.from_numpy(label)
+        meta = np.array([nf,start_f])
+
+        return video_to_tensor(imgs), torch.from_numpy(label), torch.from_numpy(meta)
 
     def __len__(self):
         return len(self.data)

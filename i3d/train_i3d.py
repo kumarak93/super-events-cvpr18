@@ -33,11 +33,12 @@ from apmeter import APMeter
 from pytorch_i3d import InceptionI3d
 
 from charades_dataset import Charades as Dataset
+from charades_dataset_full import Charades as Dataset_Full
 
 import warnings
 warnings.filterwarnings("ignore")
 
-def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades.json', batch_size=8): #, save_model=''):
+def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades_temp.json', batch_size=8): #, save_model=''):
     # setup dataset
     train_transforms = transforms.Compose([videotransforms.RandomCrop(224),
                                            videotransforms.RandomHorizontalFlip(),
@@ -47,8 +48,8 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
     dataset = Dataset(train_split, 'training', root, mode, train_transforms)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
 
-    val_dataset = Dataset(train_split, 'testing', root, mode, test_transforms)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)    
+    val_dataset = Dataset_Full(train_split, 'testing', root, mode, test_transforms)
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=16, pin_memory=True)    
 
     dataloaders = {'train': dataloader, 'val': val_dataloader}
     datasets = {'train': dataset, 'val': val_dataset}
@@ -114,7 +115,8 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 num_iter += 1
                 #print(num_iter)
                 # get the inputs
-                inputs, labels = data
+                inputs, labels, meta = data
+                print(meta)
                 #print(inputs.shape, labels.shape) #(B Ch=3 T=64 H=224 W=224) (B C=157 T)
 
                 # wrap them in Variable
@@ -122,7 +124,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 t = inputs.size(2)
                 labels = Variable(labels.cuda())
 
-                per_frame_logits = i3d(inputs)
+                per_frame_logits = i3d([inputs, meta])
                 # upsample to input size
                 per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
                 probs = F.sigmoid(per_frame_logits)

@@ -54,18 +54,22 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
     
     # setup the model
     if mode == 'flow':
-        i3d = InceptionI3d(400, in_channels=2)
-        i3d.load_state_dict(torch.load('models/flow_imagenet.pt'))
+        i3d = InceptionI3d(157, in_channels=2) #400 for imagenet_kinetics
+        state = i3d.state_dict()
+        state.update(torch.load('models/flow_charades.pt'))
+        i3d.load_state_dict(state)
         save_model = 'models/flow_temp_'
     else:
-        i3d = InceptionI3d(400, in_channels=3)
-        i3d.load_state_dict(torch.load('models/rgb_imagenet.pt'))
+        i3d = InceptionI3d(157, in_channels=3)
+        state = i3d.state_dict()
+        state.update(torch.load('models/rgb_charades.pt'))
+        i3d.load_state_dict(state)
         save_model = 'models/rgb_temp_'
-    i3d.replace_logits(157)
+    #i3d.replace_logits(157)
     #i3d.load_state_dict(torch.load('/ssd/models/000920.pt'))
     i3d.cuda()
 
-    #i3d.freeze('Mixed_5c')
+    i3d.freeze('Mixed_5c')
     
     for name, param in i3d.named_parameters():
         if param.requires_grad:print('updating: {}'.format(name))

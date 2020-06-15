@@ -9,6 +9,8 @@ import os
 import sys
 from collections import OrderedDict
 
+import attn_t as attn
+
 
 class MaxPool3dSamePadding(nn.MaxPool3d):
     
@@ -149,6 +151,21 @@ class InceptionModule(nn.Module):
         return torch.cat([b0,b1,b2,b3], dim=1)
 
 
+class SkipAttention(nn.Module):
+    def __init__(self, in_channels, out_channels, name='Skip_Mixed_3'):
+        super(SkipAttention, self).__init__()
+
+        self.attn = attn.AttnLayer(N=3, name=name+'_Attn')
+        self.conv = Unit3D(in_channels=in_channels, output_channels=out_channels, kernel_shape=[1, 1, 1], padding=0,
+                         name=name+'_Conv')
+        self.name = name
+
+    def forward(self, x):    
+        x = self.attn(x)
+        x = self.conv(x)
+        return x
+
+
 class InceptionI3d(nn.Module):
     """Inception-v1 I3D architecture.
     The model is introduced in:
@@ -171,6 +188,7 @@ class InceptionI3d(nn.Module):
         'Conv3d_2b_1x1',
         'Conv3d_2c_3x3',
         'MaxPool3d_3a_3x3',
+        'Skip_Mixed_3', ############
         'Mixed_3b',
         'Mixed_3c',
         'MaxPool3d_4a_3x3',
@@ -242,6 +260,12 @@ class InceptionI3d(nn.Module):
         self.end_points[end_point] = MaxPool3dSamePadding(kernel_size=[1, 3, 3], stride=(1, 2, 2),
                                                              padding=0)
         if self._final_endpoint == end_point: return
+
+        #########################
+        end_point = 'Skip_Mixed_3'
+        self.end_points[end_point] = SkipAttention(192, 128+192+96+64, name=end_point)
+        if self._final_endpoint == end_point: return
+        #########################
         
         end_point = 'Mixed_3b'
         self.end_points[end_point] = InceptionModule(192, [64,96,128,16,32,32], name+end_point)
@@ -301,6 +325,8 @@ class InceptionI3d(nn.Module):
                              use_bias=True,
                              name='logits')
 
+        #self.skipped = False
+        
         self.build()
 
 
@@ -322,7 +348,13 @@ class InceptionI3d(nn.Module):
     def forward(self, x):
         for end_point in self.VALID_ENDPOINTS:
             if end_point in self.end_points:
-                x = self._modules[end_point](x) # use _modules to work with dataparallel
+                if end_point not in ['Skip_Mixed_3', 'MaxPool3d_4a_3x3']:
+                    x = self._modules[end_point](x) # use _modules to work with dataparallel
+                elif end_point == 'Skip_Mixed_3':
+                    x_skip = self._modules[end_point](x)
+                elif end_point == 'MaxPool3d_4a_3x3':
+                    x = self._modules[end_point](x + x_skip)
+                    
 
         x = self.logits(self.dropout(self.avg_pool(x)))
         if self._spatial_squeeze:
@@ -334,6 +366,8 @@ class InceptionI3d(nn.Module):
         for end_point in self.VALID_ENDPOINTS[:self.VALID_ENDPOINTS.index(layer)+1]:
             if end_point in self.end_points:
                 #print(end_point)
+                if 'Skip' in end_point:
+                    continue
                 for _, param in self._modules[end_point].named_parameters():
                     param.requires_grad = False   
 

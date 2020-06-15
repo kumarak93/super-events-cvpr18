@@ -34,8 +34,10 @@ from pytorch_i3d import InceptionI3d
 
 from charades_dataset import Charades as Dataset
 
+import warnings
+warnings.filterwarnings("ignore")
 
-def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades.json', batch_size=8): #, save_model=''):
+def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades.json', batch_size=8*2): #, save_model=''):
     # setup dataset
     train_transforms = transforms.Compose([videotransforms.RandomCrop(224),
                                            videotransforms.RandomHorizontalFlip(),
@@ -55,13 +57,17 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
     # setup the model
     if mode == 'flow':
         i3d = InceptionI3d(400, in_channels=2)
-        i3d.load_state_dict(torch.load('models/flow_imagenet.pt'))
+        i3d.replace_logits(157)
+        #i3d.load_state_dict(torch.load('models/flow_imagenet.pt'))
+        i3d.load_state_dict(torch.load('models/flow_charades.pt'))
         save_model = 'models/flow_temp_'
     else:
         i3d = InceptionI3d(400, in_channels=3)
-        i3d.load_state_dict(torch.load('models/rgb_imagenet.pt'))
+        i3d.replace_logits(157)
+        #i3d.load_state_dict(torch.load('models/rgb_imagenet.pt'))
+        i3d.load_state_dict(torch.load('models/rgb_charades.pt'))
         save_model = 'models/rgb_temp_'
-    i3d.replace_logits(157)
+    #i3d.replace_logits(157)
     #i3d.load_state_dict(torch.load('/ssd/models/000920.pt'))
     i3d.cuda()
 
@@ -112,9 +118,9 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 #print(inputs.shape, labels.shape) #(B Ch=3 T=64 H=224 W=224) (B C=157 T)
 
                 # wrap them in Variable
-                inputs = Variable(inputs.cuda())
+                inputs = inputs.cuda() #Variable(inputs.cuda())
                 t = inputs.size(2)
-                labels = Variable(labels.cuda())
+                labels = labels.cuda() #Variable(labels.cuda())
 
                 per_frame_logits = i3d(inputs)
                 # upsample to input size
@@ -122,11 +128,13 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 probs = F.sigmoid(per_frame_logits)
 
                 if phase == 'train':
-                    for b in range(labels.shape[0]):
-                        tr_apm.add(probs[b].detach().cpu().numpy(), labels[b].cpu().numpy())
+                    tr_apm.add(probs.view(-1).detach().cpu().numpy(), labels.cpu().view(-1).numpy())
+                    #for b in range(0,int(labels.shape[0])):
+                    #    tr_apm.add(probs.detach().cpu().numpy()[b], labels.cpu().numpy()[b])
                 else:
-                    for b in range(labels.shape[0]):
-                        val_apm.add(probs[b].detach().cpu().numpy(), labels[b].cpu().numpy())
+                    val_apm.add(probs.view(-1).detach().cpu().numpy(), labels.view(-1).cpu().numpy())
+                    #for b in range(0,int(labels.shape[0])):
+                    #    val_apm.add(probs.detach().cpu().numpy()[b], labels.cpu().numpy()[b])
 
                 # compute localization loss
                 loc_loss = F.binary_cross_entropy_with_logits(per_frame_logits, labels)
@@ -154,6 +162,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                         torch.save(i3d.module.state_dict(), save_model+str(steps).zfill(6)+'.pt')
                         tot_loss = tot_loc_loss = tot_cls_loss = 0.
                     if steps % 100 == 0:
+                        print('tr_apm reset')
                         tr_apm.reset()
             if phase == 'val':
                 val_map = val_apm.value().mean()

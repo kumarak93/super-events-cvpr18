@@ -63,7 +63,7 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    pre_data_file = split_file[:-5]+'_'+split+'labeldata_temp.npy'
+    pre_data_file = split_file[:-5]+'_'+split+'labeldata.npy'
     if os.path.exists(pre_data_file):
         print('{} exists'.format(pre_data_file))
         dataset = np.load(pre_data_file, allow_pickle=True)

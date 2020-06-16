@@ -38,7 +38,7 @@ from charades_dataset_full import Charades as Dataset_Full
 import warnings
 warnings.filterwarnings("ignore")
 
-def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades_temp.json', batch_size=8): #, save_model=''):
+def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades.json', batch_size=8): #, save_model=''):
     # setup dataset
     train_transforms = transforms.Compose([videotransforms.RandomCrop(224),
                                            videotransforms.RandomHorizontalFlip(),
@@ -116,35 +116,39 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 #print(num_iter)
                 # get the inputs
                 inputs, labels, meta = data
-                print(meta)
+                #print(meta)
                 #print(inputs.shape, labels.shape) #(B Ch=3 T=64 H=224 W=224) (B C=157 T)
 
                 # wrap them in Variable
-                inputs = Variable(inputs.cuda())
+                inputs = Variable(inputs.cuda()) # B 3 T W H
                 t = inputs.size(2)
-                labels = Variable(labels.cuda())
+                labels = Variable(labels.cuda()) # B C T
 
-                per_frame_logits = i3d([inputs, meta])
+                per_frame_logits = i3d([inputs, meta]) # B C T//16 
+                
                 # upsample to input size
-                per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
+                #per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
+                labels = F.interpolate(labels, size=per_frame_logits.shape[2])
+                
                 probs = F.sigmoid(per_frame_logits)
+                #print(labels.shape, probs.shape)
 
                 if phase == 'train':
                     for b in range(labels.shape[0]):
-                        tr_apm.add(probs[b].detach().cpu().numpy(), labels[b].cpu().numpy())
+                        tr_apm.add(probs[b].transpose(0,1).detach().cpu().numpy(), labels[b].transpose(0,1).cpu().numpy())
                 else:
                     for b in range(labels.shape[0]):
-                        val_apm.add(probs[b].detach().cpu().numpy(), labels[b].cpu().numpy())
+                        val_apm.add(probs[b].transpose(0,1).detach().cpu().numpy(), labels[b].transpose(0,1).cpu().numpy())
 
                 # compute localization loss
                 loc_loss = F.binary_cross_entropy_with_logits(per_frame_logits, labels)
                 tot_loc_loss += loc_loss.item() #data[0]
 
                 # compute classification loss (with max-pooling along time B x C x T)
-                cls_loss = F.binary_cross_entropy_with_logits(torch.max(per_frame_logits, dim=2)[0], torch.max(labels, dim=2)[0])
+                cls_loss = 0 * F.binary_cross_entropy_with_logits(torch.max(per_frame_logits, dim=2)[0], torch.max(labels, dim=2)[0])
                 tot_cls_loss += cls_loss.item() #data[0]
 
-                loss = (0.5*loc_loss + 0.5*cls_loss)/num_steps_per_update
+                loss = 2 * (0.5*loc_loss + 0.5*cls_loss)/num_steps_per_update
                 tot_loss += loss.item() #data[0]
                 loss.backward()
 
@@ -156,7 +160,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                     lr_sched.step()
                     if steps % 10 == 0:
                         tr_map = tr_apm.value().mean()
-                        i3d.module.get_attn_para() #### print mu, sigma
+                        #i3d.module.get_attn_para() #### print mu, sigma
                         print ('{} steps: {} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f} mAP: {:.4f}'.format(phase, 
                             steps, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10, tr_map))
                         # save model

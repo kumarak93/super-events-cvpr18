@@ -188,7 +188,7 @@ class InceptionI3d(nn.Module):
         'Conv3d_2b_1x1',
         'Conv3d_2c_3x3',
         'MaxPool3d_3a_3x3',
-        'Skip_Mixed_3', ############
+        #'Skip_Mixed_3', ############
         'Mixed_3b',
         'Mixed_3c',
         'MaxPool3d_4a_3x3',
@@ -262,9 +262,11 @@ class InceptionI3d(nn.Module):
         if self._final_endpoint == end_point: return
 
         #########################
+        '''
         end_point = 'Skip_Mixed_3'
         self.end_points[end_point] = SkipAttention(192, 128+192+96+64, name=end_point)
         if self._final_endpoint == end_point: return
+        '''
         #########################
         
         end_point = 'Mixed_3b'
@@ -349,12 +351,12 @@ class InceptionI3d(nn.Module):
         x, meta = inp
         for end_point in self.VALID_ENDPOINTS:
             if end_point in self.end_points:
-                if end_point not in ['Skip_Mixed_3', 'MaxPool3d_4a_3x3']:
+                if end_point not in ['Skip_Mixed_3']: #, 'MaxPool3d_4a_3x3']:
                     x = self._modules[end_point](x) # use _modules to work with dataparallel
-                elif end_point == 'Skip_Mixed_3':
-                    x_skip = self._modules[end_point]([x, meta])
-                elif end_point == 'MaxPool3d_4a_3x3':
-                    x = self._modules[end_point](x + x_skip)
+                #elif end_point == 'Skip_Mixed_3':
+                #    x_skip = self._modules[end_point]([x, meta])
+                #elif end_point == 'MaxPool3d_4a_3x3':
+                #    x = self._modules[end_point](x + x_skip)
                     
 
         x = self.logits(self.dropout(self.avg_pool(x)))

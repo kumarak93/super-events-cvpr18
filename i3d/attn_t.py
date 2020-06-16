@@ -17,7 +17,7 @@ class AttnLayer(nn.Module):
         self.sigma_t.data.normal_(0,0.0001) #0.0001
 
 
-    def get_filters(self, mu_t, sigma_t, length, time):
+    def get_filters(self, mu_t, sigma_t, length, time, batch):
 
         sigma_t = 1 * torch.exp(1.5 - 2.0 * sigma_t)
         t = torch.arange(0,time).to(torch.float32).cuda()
@@ -29,21 +29,23 @@ class AttnLayer(nn.Module):
         return f
 
     def forward(self, inp):
-        # adjust length and mask
+        # adjust length and mask --- this version works for only val batch=1
         video, meta = inp # meta B [nf,st]
-        frames, starts = meta[:0], meta[:1]
-        frames = frames // 2 # account for pooling -- change
+        meta = (meta - 1)//2 + 1 # account for pooling -- change -- not universally correct
+        frames, starts = meta[:,0], meta[:,1]
+        #frames, starts = frames//2, starts//2 # account for pooling -- change
 
-        batch, channels, time, width, height = video.size() # time=64
+        batch, channels, time, width, height = video.size() # time=64//2
         vid = video.unsqueeze(2).repeat(1,1,self.Ni,1,1,1) # B C N T W H
         f = self.get_filters(torch.tanh(self.mu_t), torch.sigmoid(self.sigma_t), 
-                                frames.view(batch,1).repeat(1,self.Ni).view(-1), max(frames).item()) # B N Tf
+                                frames.view(batch,1).repeat(1,self.Ni).view(-1), max(frames).item(), batch) # B N Tf
         if self.training: # try to do this without for loops
             f_arr = []
             for i in range(batch):
-                f_arr.append(f[i, :, starts[i].item():starts[i].item()+time])
+                st_i = starts[i].item()
+                f_arr.append(f[i, :, st_i:st_i+time])
             f = torch.stack(f_arr, dim=0) # B N T
-        f = f.view(batch,1,self.Ni,time,1,1) # B 1 N T 1 1
+        f = f[:,:,:time].view(batch,1,self.Ni,time,1,1) # B 1 N T 1 1
         #print(vid.shape, f.shape)
         o = torch.sum(f*vid, dim=2) # B C T W H
         return o

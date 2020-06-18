@@ -30,13 +30,15 @@ import numpy as np
 from barbar import Bar
 from apmeter import APMeter
 
-from pytorch_i3d import InceptionI3d
+from pytorch_i3d_attn import InceptionI3d
 
 from charades_dataset import Charades as Dataset
 from charades_dataset_full import Charades as Dataset_Full
 
 import warnings
 warnings.filterwarnings("ignore")
+
+np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades.json', batch_size=8): #, save_model=''):
     # setup dataset
@@ -53,7 +55,6 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
 
     dataloaders = {'train': dataloader, 'val': val_dataloader}
     datasets = {'train': dataset, 'val': val_dataset}
-    print('train',len(datasets['train']),'val',len(datasets['val']))
     print('datasets created')
     
     # setup the model
@@ -69,11 +70,11 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
         state.update(torch.load('models/rgb_charades.pt'))
         i3d.load_state_dict(state)
         save_model = 'models/rgb_temp_attnT_'
-    i3d.replace_logits(50)
+    #i3d.replace_logits(157)
     #i3d.load_state_dict(torch.load('/ssd/models/000920.pt'))
     i3d.cuda()
 
-    i3d.freeze('Mixed_5c')
+    #i3d.freeze('Mixed_5c')
     
     for name, param in i3d.named_parameters():
         if param.requires_grad:print('updating: {}'.format(name))
@@ -126,7 +127,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 # wrap them in Variable
                 inputs = inputs.cuda() # B 3 T W H
                 t = inputs.size(2)
-                labels = labels.cuda()[:,:50,:] # B C T
+                labels = labels.cuda() # B C T
                 #print([torch.where(labels[0,:,i]==1)[0].cpu().numpy() for i in range(0,labels.shape[2])])
                 #print('l_full',torch.argmax(labels[0], dim=0).detach().cpu().numpy())
 
@@ -157,10 +158,10 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 tot_loc_loss += loc_loss.item() #data[0]
 
                 # compute classification loss (with max-pooling along time B x C x T)
-                cls_loss = 0 * F.binary_cross_entropy_with_logits(torch.max(per_frame_logits, dim=2)[0], torch.max(labels, dim=2)[0])
+                cls_loss = 1 * F.binary_cross_entropy_with_logits(torch.max(per_frame_logits, dim=2)[0], torch.max(labels, dim=2)[0])
                 tot_cls_loss += cls_loss.item() #data[0]
 
-                loss = 2 * (0.5*loc_loss + 0.5*cls_loss)/num_steps_per_update
+                loss = 1 * (0.5*loc_loss + 0.5*cls_loss)/num_steps_per_update
                 tot_loss += loss.item() #data[0]
                 
                 if phase == 'train':
@@ -174,13 +175,13 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                     lr_sched.step()
                     if steps % 10 == 0:
                         tr_map = tr_apm.value().mean()
-                        #i3d.module.get_attn_para() #### print mu, sigma
+                        attn_para = i3d.module.get_attn_para() #### print mu, sigma
                         print ('{} steps: {} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f} mAP: {:.4f}'.format(phase, 
-                            steps, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10, tr_map))
+                            steps, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10, tr_map), attn_para)
                         # save model
                         torch.save(i3d.module.state_dict(), save_model+str(steps).zfill(6)+'.pt')
                         tot_loss = tot_loc_loss = tot_cls_loss = 0.
-                    if steps % 10 == 0:
+                    if steps % 100 == 0:
                         tr_apm.reset()
             if phase == 'val':
                 val_map = val_apm.value().mean()

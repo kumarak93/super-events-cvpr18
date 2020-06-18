@@ -105,7 +105,11 @@ class Charades(data_utl.Dataset):
 
     def __init__(self, split_file, split, root, mode, transforms=None, save_dir='', num=0):
         
-        self.data = make_dataset(split_file, split, root, mode)
+        if split == 'training':
+            limit = 1000
+        elif split == 'testing':
+            limit = 500
+        self.data = make_dataset(split_file, split, root, mode)[:limit]
         self.split_file = split_file
         self.transforms = transforms
         self.mode = mode

@@ -63,10 +63,17 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    pre_data_file = split_file[:-5]+'_'+split+'labeldata.npy'
+    #pre_data_file = split_file[:-5]+'_'+split+'labeldata.npy'
+    pre_data_file = split_file[:-5]+'_'+split+'labeldata_64x4.npy'
+    #a=[]
     if os.path.exists(pre_data_file):
         print('{} exists'.format(pre_data_file))
         dataset = np.load(pre_data_file, allow_pickle=True)
+        #for dat in dataset:
+        #    if dat[3] >= 64*4+2:
+        #        a.append(dat)
+        #np.save(pre_data_file2, a)
+
     else:
         print('{} does not exist'.format(pre_data_file))
         i = 0
@@ -80,7 +87,7 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
             if mode == 'flow':
                 num_frames = num_frames//2
                 
-            if num_frames < 66:
+            if num_frames < 64*4+2:
                 continue
 
             label = np.zeros((num_classes,num_frames), np.float32)
@@ -104,7 +111,11 @@ class Charades(data_utl.Dataset):
 
     def __init__(self, split_file, split, root, mode, transforms=None):
         
-        self.data = make_dataset(split_file, split, root, mode)
+        if split == 'training':
+            limit = 1000
+        elif split == 'testing':
+            limit = 500
+        self.data = make_dataset(split_file, split, root, mode)[:limit]
         self.split_file = split_file
         self.transforms = transforms
         self.mode = mode
@@ -119,13 +130,13 @@ class Charades(data_utl.Dataset):
             tuple: (image, target) where target is class_index of the target class.
         """
         vid, label, dur, nf = self.data[index]
-        start_f = random.randint(1,nf-65)
+        start_f = random.randint(1,nf-(64*4+1))
 
         if self.mode == 'rgb':
-            imgs = load_rgb_frames(self.root, vid, start_f, 64)
+            imgs = load_rgb_frames(self.root, vid, start_f, 64*4)
         else:
-            imgs = load_flow_frames(self.root, vid, start_f, 64)
-        label = label[:, start_f:start_f+64]
+            imgs = load_flow_frames(self.root, vid, start_f, 64*4)
+        label = label[:, start_f:start_f+64*4]
 
         imgs = self.transforms(imgs)
 

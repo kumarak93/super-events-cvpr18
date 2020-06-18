@@ -16,7 +16,7 @@ def video_to_tensor(pic):
     """Convert a ``numpy.ndarray`` to tensor.
     Converts a numpy.ndarray (T x H x W x C)
     to a torch.FloatTensor of shape (C x T x H x W)
-    
+
     Args:
          pic (numpy.ndarray): Video to be converted to tensor.
     Returns:
@@ -43,14 +43,14 @@ def load_flow_frames(image_dir, vid, start, num):
   for i in range(start, start+num):
     imgx = cv2.imread(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'x.jpg'), cv2.IMREAD_GRAYSCALE)
     imgy = cv2.imread(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'y.jpg'), cv2.IMREAD_GRAYSCALE)
-    
+
     w,h = imgx.shape
     if w < 224 or h < 224:
         d = 224.-min(w,h)
         sc = 1+d/min(w,h)
         imgx = cv2.resize(imgx,dsize=(0,0),fx=sc,fy=sc)
         imgy = cv2.resize(imgy,dsize=(0,0),fx=sc,fy=sc)
-        
+
     imgx = (imgx/255.)*2 - 1
     imgy = (imgy/255.)*2 - 1
     img = np.asarray([imgx, imgy]).transpose([1,2,0])
@@ -63,8 +63,8 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    #pre_data_file = split_file[:-5]+'_'+split+'labeldata.npy'
-    pre_data_file = split_file[:-5]+'_'+split+'labeldata_64x4.npy'
+    pre_data_file = split_file[:-5]+'_'+split+'labeldata.npy'
+    #pre_data_file = split_file[:-5]+'_'+split+'labeldata_64x4.npy'
     #a=[]
     if os.path.exists(pre_data_file):
         print('{} exists'.format(pre_data_file))
@@ -86,8 +86,8 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
             num_frames = len(os.listdir(os.path.join(root, vid)))
             if mode == 'flow':
                 num_frames = num_frames//2
-                
-            if num_frames < 64*4+2:
+
+            if num_frames < 64*1+2:
                 continue
 
             label = np.zeros((num_classes,num_frames), np.float32)
@@ -102,7 +102,7 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
             i += 1
             print(i, vid)
         np.save(pre_data_file, dataset)
-    
+
     print('dataset size:%d'%len(dataset))
     return dataset
 
@@ -110,7 +110,7 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
 class Charades(data_utl.Dataset):
 
     def __init__(self, split_file, split, root, mode, transforms=None):
-        
+
         if split == 'training':
             limit = 1000
         elif split == 'testing':
@@ -130,13 +130,13 @@ class Charades(data_utl.Dataset):
             tuple: (image, target) where target is class_index of the target class.
         """
         vid, label, dur, nf = self.data[index]
-        start_f = random.randint(1,nf-(64*4+1))
+        start_f = random.randint(1,nf-(64*1+1))
 
         if self.mode == 'rgb':
-            imgs = load_rgb_frames(self.root, vid, start_f, 64*4)
+            imgs = load_rgb_frames(self.root, vid, start_f, 64*1)
         else:
-            imgs = load_flow_frames(self.root, vid, start_f, 64*4)
-        label = label[:, start_f:start_f+64*4]
+            imgs = load_flow_frames(self.root, vid, start_f, 64*1)
+        label = label[:, start_f:start_f+64*1]
 
         imgs = self.transforms(imgs)
 

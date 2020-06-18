@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 import sys
 import argparse
 
@@ -28,11 +28,13 @@ import videotransforms
 import numpy as np
 
 from pytorch_i3d import InceptionI3d
+from pytorch_i3d_attn import InceptionI3d
 
 from charades_dataset_full import Charades as Dataset
 
 
-def run(max_steps=64e3, mode='flow', root='../../charades/Charades_v1_flow', split='../data/charades.json', batch_size=1, load_model='./models/flow_charades.pt', save_dir='../../charades_feat_new/Charades_v1_flow_feat'):
+def run(max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', split='../data/charades.json',
+        batch_size=1, load_model='', save_dir='/nfs/bigneuron/kumarak_temp/charades_temp_feat'):
     # setup dataset
     test_transforms = transforms.Compose([videotransforms.CenterCrop(224)])
 
@@ -40,38 +42,40 @@ def run(max_steps=64e3, mode='flow', root='../../charades/Charades_v1_flow', spl
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
     val_dataset = Dataset(split, 'testing', root, mode, test_transforms, num=-1, save_dir=save_dir)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)    
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
     dataloaders = {'train': dataloader, 'val': val_dataloader}
     datasets = {'train': dataset, 'val': val_dataset}
+    print('train',len(datasets['train']),'val',len(datasets['val']))
     print('data')
 
-    
+
     # setup the model
     if mode == 'flow':
-        i3d = InceptionI3d(400, in_channels=2) #, final_endpoint='Mixed_5c')
+        i3d = InceptionI3d(157, in_channels=2) #, final_endpoint='Mixed_5c')
     else:
-        i3d = InceptionI3d(400, in_channels=3) #, final_endpoint='Mixed_5c')
-    i3d.replace_logits(157)
+        i3d = InceptionI3d(157, in_channels=3) #, final_endpoint='Mixed_5c')
+    i3d.replace_logits(50)
     i3d.load_state_dict(torch.load(load_model))
     i3d.cuda()
     print('model')
 
     for phase in ['train', 'val']:
         i3d.train(False)  # Set model to evaluate mode
-                
+        torch.autograd.set_grad_enabled(False)
+
         tot_loss = 0.0
         tot_loc_loss = 0.0
         tot_cls_loss = 0.0
-                    
+
         # Iterate over data.
         for data in dataloaders[phase]:
             # get the inputs
             #print('data i')
             inputs, labels, name = data
-            print(name)
             if os.path.exists(os.path.join(save_dir, name[0]+'.npy')):
                 continue
+            print(name)
 
             b,c,t,h,w = inputs.shape
             size_t=200 #1600
@@ -97,5 +101,5 @@ def run(max_steps=64e3, mode='flow', root='../../charades/Charades_v1_flow', spl
 
 if __name__ == '__main__':
     # need to add argparse
-    run()
+    run(load_model=args.load_model, save_dir='/nfs/bigneuron/kumarak_temp/charades_temp_feat/'+args.save_dir)
     #run(mode=args.mode, root=args.root, load_model=args.load_model, save_dir=args.save_dir)

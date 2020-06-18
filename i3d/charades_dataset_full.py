@@ -16,7 +16,7 @@ def video_to_tensor(pic):
     """Convert a ``numpy.ndarray`` to tensor.
     Converts a numpy.ndarray (T x H x W x C)
     to a torch.FloatTensor of shape (C x T x H x W)
-    
+
     Args:
          pic (numpy.ndarray): Video to be converted to tensor.
     Returns:
@@ -43,7 +43,7 @@ def load_flow_frames(image_dir, vid, start, num):
   for i in range(start, start+num):
     imgx = cv2.imread(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'x.jpg'), cv2.IMREAD_GRAYSCALE)
     imgy = cv2.imread(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'y.jpg'), cv2.IMREAD_GRAYSCALE)
-    
+
     #print(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'x.jpg'))
     w,h = imgx.shape
     if w < 224 or h < 224:
@@ -51,7 +51,7 @@ def load_flow_frames(image_dir, vid, start, num):
         sc = 1+d/min(w,h)
         imgx = cv2.resize(imgx,dsize=(0,0),fx=sc,fy=sc)
         imgy = cv2.resize(imgy,dsize=(0,0),fx=sc,fy=sc)
-        
+
     imgx = (imgx/255.)*2 - 1
     imgy = (imgy/255.)*2 - 1
     img = np.asarray([imgx, imgy]).transpose([1,2,0])
@@ -65,6 +65,7 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
         data = json.load(f)
 
     pre_data_file = split_file[:-5]+'_'+split+'labeldata.npy'
+    #pre_data_file = split_file[:-5]+'_'+split+'labeldata_64x4.npy'
     if os.path.exists(pre_data_file):
         print('{} exists'.format(pre_data_file))
         dataset = np.load(pre_data_file, allow_pickle=True)
@@ -80,8 +81,8 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
             num_frames = len(os.listdir(os.path.join(root, vid)))
             if mode == 'flow':
                 num_frames = num_frames//2
-                
-            if num_frames < 66:
+
+            if num_frames < 64*1+2:
                 continue
 
             label = np.zeros((num_classes,num_frames), np.float32)
@@ -96,7 +97,7 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
             i += 1
             print(i, vid)
         np.save(pre_data_file, dataset)
-    
+
     print('dataset size:%d'%len(dataset))
     return dataset
 
@@ -104,9 +105,9 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
 class Charades(data_utl.Dataset):
 
     def __init__(self, split_file, split, root, mode, transforms=None, save_dir='', num=0):
-        
+
         if split == 'training':
-            limit = 1000
+            limit = 1000 ####
         elif split == 'testing':
             limit = 500
         self.data = make_dataset(split_file, split, root, mode)[:limit]

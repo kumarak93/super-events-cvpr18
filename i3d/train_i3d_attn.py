@@ -1,5 +1,5 @@
 import os
-#os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   
+#os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 #os.environ["CUDA_VISIBLE_DEVICES"]='0,1,2,3'
 import sys
 import argparse
@@ -51,35 +51,35 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
 
     val_dataset = Dataset_Full(train_split, 'testing', root, mode, test_transforms)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=16, pin_memory=True)    
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=16, pin_memory=True)
 
     dataloaders = {'train': dataloader, 'val': val_dataloader}
     datasets = {'train': dataset, 'val': val_dataset}
     print('datasets created')
-    
+
     # setup the model
     if mode == 'flow':
         i3d = InceptionI3d(157, in_channels=2) #400 for imagenet_kinetics
         state = i3d.state_dict()
         state.update(torch.load('models/flow_charades.pt'))
         i3d.load_state_dict(state)
-        save_model = 'models/flow_temp_'
+        save_model = 'models/flow_temp_attnT_'
     else:
         i3d = InceptionI3d(157, in_channels=3)
         state = i3d.state_dict()
         state.update(torch.load('models/rgb_charades.pt'))
         i3d.load_state_dict(state)
         save_model = 'models/rgb_temp_attnT_'
-    #i3d.replace_logits(157)
+    i3d.replace_logits(50)
     #i3d.load_state_dict(torch.load('/ssd/models/000920.pt'))
     i3d.cuda()
 
-    #i3d.freeze('Mixed_5c')
-    
+    i3d.freeze('Mixed_5c')
+
     for name, param in i3d.named_parameters():
         if param.requires_grad:print('updating: {}'.format(name))
         #else:print('frozen: {}'.format(name))
-    
+
     #summary(i3d, (3, 64, 224, 224))
     i3d = nn.DataParallel(i3d)
     print('model loaded')
@@ -107,13 +107,13 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
             else:
                 i3d.train(False)  # Set model to evaluate mode
                 torch.autograd.set_grad_enabled(False)
-                
+
             tot_loss = 0.0
             tot_loc_loss = 0.0
             tot_cls_loss = 0.0
             num_iter = 0
             optimizer.zero_grad()
-            
+
             # Iterate over data.
             print(phase)
             for data in Bar(dataloaders[phase]):
@@ -127,24 +127,24 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 # wrap them in Variable
                 inputs = inputs.cuda() # B 3 T W H
                 t = inputs.size(2)
-                labels = labels.cuda() # B C T
+                labels = labels.cuda()[:,:50,:] # B C T
                 #print([torch.where(labels[0,:,i]==1)[0].cpu().numpy() for i in range(0,labels.shape[2])])
                 #print('l_full',torch.argmax(labels[0], dim=0).detach().cpu().numpy())
 
-                per_frame_logits = i3d([inputs, meta]) # B C T//16 
-                
+                per_frame_logits = i3d([inputs, meta]) # B C T//16
+
                 # upsample to input size
-                if phase == 'train':
-                    per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
-                else:
-                    labels = F.interpolate(labels, size=per_frame_logits.shape[2])
-                
+                #if phase == 'train':
+                per_frame_logits = F.upsample(per_frame_logits, t, mode='linear')
+                #else:
+                #    labels = F.interpolate(labels, size=per_frame_logits.shape[2])
+
                 probs = F.sigmoid(per_frame_logits)
                 #print(labels.shape, probs.shape)
                 #print('l_down',[torch.where(labels[0,:,i]==1)[0].cpu().numpy() for i in range(0,labels.shape[2])])
                 #print('l_full',torch.argmax(labels[0], dim=0).detach().cpu().numpy())
                 #print('prob',probs[0].detach().cpu().numpy())
-                
+
 
                 if phase == 'train':
                     for b in range(labels.shape[0]):
@@ -163,7 +163,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
 
                 loss = 1 * (0.5*loc_loss + 0.5*cls_loss)/num_steps_per_update
                 tot_loss += loss.item() #data[0]
-                
+
                 if phase == 'train':
                     loss.backward()
 
@@ -176,19 +176,20 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                     if steps % 10 == 0:
                         tr_map = tr_apm.value().mean()
                         attn_para = i3d.module.get_attn_para() #### print mu, sigma
-                        print ('{} steps: {} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f} mAP: {:.4f}'.format(phase, 
+                        print ('{} steps: {} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f} mAP: {:.4f}'.format(phase,
                             steps, tot_loc_loss/(10*num_steps_per_update), tot_cls_loss/(10*num_steps_per_update), tot_loss/10, tr_map), attn_para)
                         # save model
-                        torch.save(i3d.module.state_dict(), save_model+str(steps).zfill(6)+'.pt')
+                        #torch.save(i3d.module.state_dict(), save_model+str(steps).zfill(6)+'.pt')
                         tot_loss = tot_loc_loss = tot_cls_loss = 0.
                     if steps % 100 == 0:
                         tr_apm.reset()
+                        torch.save(i3d.module.state_dict(), save_model+str(steps).zfill(6)+'.pt')
             if phase == 'val':
                 val_map = val_apm.value().mean()
                 val_apm.reset()
-                print ('{} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f} mAP: {:.4f}'.format(phase, 
-                    tot_loc_loss/num_iter, tot_cls_loss/num_iter, (tot_loss*num_steps_per_update)/num_iter, val_map)) 
-    
+                print ('{} Loc Loss: {:.4f} Cls Loss: {:.4f} Tot Loss: {:.4f} mAP: {:.4f}'.format(phase,
+                    tot_loc_loss/num_iter, tot_cls_loss/num_iter, (tot_loss*num_steps_per_update)/num_iter, val_map))
+
 
 
 if __name__ == '__main__':

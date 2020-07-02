@@ -6,7 +6,7 @@ import numpy as np
 
 class TSF(nn.Module):
 
-    def __init__(self, N=3, name=''):
+    def __init__(self, N=3, M=3, name=''):
         super(TSF, self).__init__()
 
         self.N = float(N)
@@ -38,7 +38,7 @@ class TSF(nn.Module):
         # f is (B x T x N)
         f = self.get_filters(torch.tanh(self.mu_t), torch.tanh(self.sigma_t), length.view(batch,1).repeat(1,self.Ni).view(-1), time, batch)
         # repeat over channels
-        fout = f # B N T
+        #fout = f # B N T
         f = f.unsqueeze(1).repeat(1, channels, 1, 1)
         f = f.view(batch*channels, self.Ni, time)
 
@@ -47,6 +47,4 @@ class TSF(nn.Module):
         del f
         del vid
         o = o.view(batch, channels*self.Ni)#.unsqueeze(3).unsqueeze(3)
-        return o, fout
-
-
+        return o #, fout

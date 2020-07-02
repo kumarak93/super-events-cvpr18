@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import numpy as np
-#import temporal_structure_filter as tsf
+import temporal_structure_filter as tsf
 #import tsf_sep_xy_t_v2 as tsf
 #import tsf_sep_xy_t_v3 as tsf
 #import self_attn_xyt as tsf
@@ -11,7 +11,7 @@ import numpy as np
 #import self_attn_xyt_gauss_combined_v6 as tsf
 #import static_attn_xyt_gauss_combined as tsf
 #import self_attn_xyt_gauss_combined_v3_constInit as tsf
-import static_attn_xy_t_gauss_sep_constInit as tsf
+#import static_attn_xy_t_gauss_sep_constInit as tsf
 
 class SuperEvent(nn.Module):
     def __init__(self, classes=65):
@@ -27,28 +27,28 @@ class SuperEvent(nn.Module):
         self.super_event2 = tsf.TSF(N,N, name='se_2').cuda()
         self.add_module('sup2', self.super_event2)
 
-        self.avg_pool = nn.AvgPool3d(kernel_size=[1, 7, 7],stride=(1, 1, 1))
+        #self.avg_pool = nn.AvgPool3d(kernel_size=[1, 7, 7],stride=(1, 1, 1))
 
         # we have 2xD*3
         # we want to learn a per-class weighting
         # to take 2xD*3 to D*3
         self.cls_wts = nn.Parameter(torch.Tensor(classes))
-        
+
         self.sup_mat = nn.Parameter(torch.Tensor(1, classes, 1024*N *1)) #####
         stdv = 1./np.sqrt(self.sup_mat.size(1)) #(1024+1024)
         self.sup_mat.data.uniform_(-stdv, stdv)
 
-        self.sim_wts_1 = nn.Parameter(torch.Tensor(2,6))
-        self.sim_wts_2 = nn.Parameter(torch.Tensor(2,6))
-        sim_sd = 1./np.sqrt(self.sim_wts_1.size(1))
-        self.sim_wts_1.data.uniform_(-sim_sd, sim_sd)
-        self.sim_wts_2.data.uniform_(-sim_sd, sim_sd)
+        #self.sim_wts_1 = nn.Parameter(torch.Tensor(2,6))
+        #self.sim_wts_2 = nn.Parameter(torch.Tensor(2,6))
+        #sim_sd = 1./np.sqrt(self.sim_wts_1.size(1))
+        #self.sim_wts_1.data.uniform_(-sim_sd, sim_sd)
+        #self.sim_wts_2.data.uniform_(-sim_sd, sim_sd)
 
         self.per_frame = nn.Conv3d(1024, classes, (1,1,1)) #### (1,1,1)/(1,7,7)
         torch.nn.init.xavier_uniform_(self.per_frame.weight) #self.per_frame.weight.data.uniform_(-stdv, stdv)
         torch.nn.init.zeros_(self.per_frame.bias) #self.per_frame.bias.data.uniform_(-stdv, stdv)
         self.add_module('pf', self.per_frame)
-        
+
     def forward(self, inp):
         #if len(inp[0].size())!=5:
         #    inp = (inp[0].unsqueeze(0), inp[1])
@@ -73,12 +73,12 @@ class SuperEvent(nn.Module):
 
         #super_event_out_1 = super_event.view(super_event.shape[0],-1)
         #super_event_out_2 = super_event.view(super_event.shape[0],-1)
-        
-        se = torch.cat((se1.view(batch,channels,-1),se2.view(batch,channels,-1)), dim=-1).view(batch*channels,1,-1) # BD 1 2N
-        se_w1 = self.sim_wts_1.repeat(batch*channels,1,3).view(batch*channels,6,6)
-        se_w2 = self.sim_wts_2.repeat(batch*channels,1,3).view(batch*channels,6,6)
-        super_event_out_1 = torch.bmm(se, se_w1).view(batch,-1)
-        super_event_out_2 = torch.bmm(se, se_w2).view(batch,-1)
+
+        #se = torch.cat((se1.view(batch,channels,-1),se2.view(batch,channels,-1)), dim=-1).view(batch*channels,1,-1) # BD 1 2N
+        #se_w1 = self.sim_wts_1.repeat(batch*channels,1,3).view(batch*channels,6,6)
+        #se_w2 = self.sim_wts_2.repeat(batch*channels,1,3).view(batch*channels,6,6)
+        #super_event_out_1 = torch.bmm(se, se_w1).view(batch,-1)
+        #super_event_out_2 = torch.bmm(se, se_w2).view(batch,-1)
 
         #super_event_out_1 = super_event.view(batch, 2, channels, 3).transpose(1,2).reshape(batch,channels,-1)
         #super_event_out_1 = torch.bmm(super_event_out_1, self.sim_wts_1.repeat(batch,1,1)).view(batch,-1)
@@ -101,21 +101,22 @@ class SuperEvent(nn.Module):
         # apply the super-event weights
         super_event = torch.sum(self.sup_mat * super_event, dim=2)
         #super_event = self.sup_mat(super_event.view(-1, 1024)).view(-1, self.classes)
-        
+
         super_event = super_event.unsqueeze(2).unsqueeze(3).unsqueeze(4)
         #print(super_event.size())
-        
+
         #inp[0] = self.dropout(inp[0])
 
         #cls = self.per_frame(torch.mean(inp[0], dim=(3,4), keepdim=True)) ##### 1D
-        cls = self.per_frame(self.avg_pool(inp[0])) ##### 1D
-        
+        #cls = self.per_frame(self.avg_pool(inp[0])) ##### 1D
+        cls = self.per_frame(inp[0])
+
         #return torch.cat((super_event,cls),dim=0), super_event_out_1, super_event_out_2
-        return super_event+cls, super_event_out_1, super_event_out_2
+        #return super_event+cls, super_event_out_1, super_event_out_2
+        return cls #, super_event_out_1, super_event_out_2
 
 
 
 def get_super_event_model(gpu, classes=65):
     model = SuperEvent(classes)
     return model.cuda()
-

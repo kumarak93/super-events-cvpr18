@@ -14,7 +14,7 @@ def video_to_tensor(pic):
     """Convert a ``numpy.ndarray`` to tensor.
     Converts a numpy.ndarray (T x H x W x C)
     to a torch.FloatTensor of shape (C x T x H x W)
-    
+
     Args:
          pic (numpy.ndarray): Video to be converted to tensor.
     Returns:
@@ -23,20 +23,22 @@ def video_to_tensor(pic):
     return torch.from_numpy(pic.transpose([3,0,1,2]))
 
 
+#'data/charades.json', 'training' '/nfs/bigneuron/kumarak_temp/charades_temp_feat/base_50'
 def make_dataset(split_file, split, root, num_classes=157):
 
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    pre_data_file = split_file.split('.')[0]+'_'+root.split('_')[-2]+'_'+split+'_corrected_dataset.npy' #dataset_temp
+    #pre_data_file = split_file.split('.')[0]+'_'+root.split('_')[-2]+'_'+split+'_corrected_dataset.npy' #dataset_temp
     #pre_data_file = split_file.split('.')[0]+'_'+root.split('_')[-2]+'_'+split+'_temp.npy'
+    pre_data_file = '/nfs/bigneuron/kumarak_temp/se_temp/super-events-cvpr18/data/'+root.split('/')[-1]+'_feat_subset_'+split+'.npy'
     print(pre_data_file)
     if os.path.exists(pre_data_file):
         print(pre_data_file)
         dataset = np.load(pre_data_file, allow_pickle=True)
         #dataset = json.load(open(pre_data_file, 'r'))
     else:
-    
+
         dataset = []
         i = 0
         for vid in data.keys():
@@ -61,7 +63,7 @@ def make_dataset(split_file, split, root, num_classes=157):
             #    break
         np.save(pre_data_file, dataset)
         #json.dump(dataset, open(pre_data_file, 'w'))
-    
+
     print('dataset size:%d'%len(dataset))
     return dataset
 
@@ -70,8 +72,12 @@ def make_dataset(split_file, split, root, num_classes=157):
 class MultiThumos(data_utl.Dataset):
 
     def __init__(self, split_file, split, root, batch_size):
-        
-        self.data = make_dataset(split_file, split, root)
+
+        if split == 'training':
+            limit = 1000 ####
+        elif split == 'testing':
+            limit = 500
+        self.data = make_dataset(split_file, split, root)[:limit]
         self.split_file = split_file
         self.batch_size = batch_size
         self.root = root
@@ -93,12 +99,13 @@ class MultiThumos(data_utl.Dataset):
             feat = np.load(os.path.join(self.root, entry[0]+'.npy'))
             #print(feat.shape)
             #feat = feat.reshape((feat.shape[0],7,7,1024)).mean(axis=(1,2), keepdims=True) ##### 1D
-            feat = feat.reshape((feat.shape[0],7,7,1024))
+            #feat = feat.reshape((feat.shape[0],7,7,1024))
+            feat = feat.reshape((feat.shape[0],1,1,1024))
             #r = np.random.randint(0,10)
             #feat = feat[:,r].reshape((feat.shape[0],1,1,1024))
             feat = feat.astype(np.float32)
             #self.in_mem[entry[0]] = feat
-            
+
         label = entry[1]
         #print(feat.shape, label.shape, [entry[0], entry[2]])
         #print(feat[0,:,:,:][None,...].repeat(900, axis=0).shape, label[0,:][None,...].repeat(900, axis=0).shape)
@@ -109,7 +116,7 @@ class MultiThumos(data_utl.Dataset):
         return len(self.data)
 
 
-    
+
 def mt_collate_fn(batch):
     "Pads data and puts it into a tensor of same dimensions"
     max_len = 0
@@ -119,6 +126,7 @@ def mt_collate_fn(batch):
 
     new_batch = []
     for b in batch:
+        #print(max_len, b[0].shape, b[1].shape)
         f = np.zeros((max_len, b[0].shape[1], b[0].shape[2], b[0].shape[3]), np.float32)
         m = np.zeros((max_len), np.float32)
         l = np.zeros((max_len, b[1].shape[1]), np.float32)
@@ -128,4 +136,3 @@ def mt_collate_fn(batch):
         new_batch.append([video_to_tensor(f), torch.from_numpy(m), torch.from_numpy(l), b[2]])
 
     return default_collate(new_batch)
-    

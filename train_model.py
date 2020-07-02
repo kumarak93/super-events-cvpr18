@@ -30,7 +30,7 @@ parser.add_argument('-dataset', type=str, default='charades')
 
 args = parser.parse_args()
 
-#os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   
+#os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu)
 
 
@@ -69,9 +69,12 @@ elif args.dataset == 'charades':
     from charades_i3d_per_video import mt_collate_fn as collate_fn
     train_split = 'data/charades.json' #charades_temp
     test_split = 'data/charades.json'
-    rgb_root = '/nfs/bigdisk/kumarak/datasets/charades_corrected/Charades_v1_rgb_feat' ##'../charades/Charades_v1_rgb_feat'
-    flow_root = '/nfs/bigdisk/kumarak/datasets/charades_corrected/Charades_v1_flow_feat' #'../charades/Charades_v1_flow_feat'
-    classes = 157
+    #rgb_root = '/nfs/bigdisk/kumarak/datasets/charades_corrected/Charades_v1_rgb_feat' ##'../charades/Charades_v1_rgb_feat'
+    #flow_root = '/nfs/bigdisk/kumarak/datasets/charades_corrected/Charades_v1_flow_feat' #'../charades/Charades_v1_flow_feat'
+    #classes = 157
+    rgb_root = '/data/kumarak_temp/charades_temp_feat/original_50'
+    flow_root = ''
+    classes = 50
 elif args.dataset == 'ava':
     from ava_i3d_per_video import Ava as Dataset
     from ava_i3d_per_video import ava_collate_fn as collate_fn
@@ -82,7 +85,7 @@ elif args.dataset == 'ava':
     classes = 80
     # reduce batchsize as AVA videos are very long
     batch_size = 6
-    
+
 
 
 def sigmoid(x):
@@ -96,7 +99,7 @@ def load_data(train_split, val_split, root):
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=False, collate_fn=collate_fn)
         dataloader.root = root
     else:
-        
+
         dataset = None
         dataloader = None
 
@@ -117,9 +120,9 @@ def run(models, criterion, num_epochs=50):
     #best_loss = 10000
     best_map = 0
     for epoch in range(num_epochs):
-        
+
         reg_margin = max(0.3, 1- 0.05*(1+epoch))
-        
+
         print ('Epoch {}/{} : reg_margin {}'.format(epoch, num_epochs - 1, reg_margin))
         print ('-' * 10)
 
@@ -149,9 +152,9 @@ def eval_model(model, dataloader, baseline=False):
 
 '''
 def similarity_loss(super_events_1, super_events_2, labels, mask):
-    #classes =torch.cat([torch.sum(F.one_hot(torch.unique(torch.where(labels[i]==1)[1]), 
+    #classes =torch.cat([torch.sum(F.one_hot(torch.unique(torch.where(labels[i]==1)[1]),
     #    num_classes=labels.shape[-1]), dim=0).view(1,-1) for i in range(0,labels.shape[0])], dim=-1).float() # B C
-    
+
     #labels B T C
     #mask B T
     classes = torch.sum(labels,dim=1) * 100 / torch.sum(mask, dim=1).view(-1,1) # B C
@@ -181,41 +184,41 @@ def run_network(model, data, gpu, baseline=False, reg_margin=0):
     #print(inputs.shape, mask, labels.shape, other)
     #print(inputs.shape)
     #print(inputs.shape, torch.cuda.max_memory_allocated(device=gpu))
-    
+
     # wrap them in Variable
     inputs = inputs.cuda()
     mask = mask.cuda()
-    labels = labels.cuda() # B T C
+    labels = labels.cuda()[:,:,:50] # B T C
     #print('m', labels[0,:5,:])
     #toprint=[list(torch.unique(torch.where(labels[i]==1)[1]).cpu().numpy()) for i in range(0,labels.shape[0])]
     #for i in toprint: print(i)
     #print('***\n')
-    
+
     #cls_wts = torch.FloatTensor([1.00]).cuda(gpu)
 
     # forward
     if not baseline:
-        #outputs = model([inputs, torch.sum(mask, 1)])
+        outputs = model([inputs, torch.sum(mask, 1)])
         #print(outputs.shape)
-        outputs, super_events_1, super_events_2 = model([inputs, torch.sum(mask, 1)])
+        #outputs, super_events_1, super_events_2 = model([inputs, torch.sum(mask, 1)])
     else:
-        #outputs = model(inputs)
-        outputs, super_events_1, super_events_2 = model(inputs)
-    
+        outputs = model(inputs)
+        #outputs, super_events_1, super_events_2 = model(inputs)
+
     #sim_loss = similarity_loss(super_events_1, super_events_2, labels, mask)
 
     outputs = outputs.squeeze(3).squeeze(3).permute(0,2,1) #.cpu() # remove spatial dims
     ##outputs = outputs.permute(0,2,1) # remove spatial dims
     probs = F.sigmoid(outputs) * mask.unsqueeze(2)
-    
+
     # binary action-prediction loss
     loss = F.binary_cross_entropy_with_logits(outputs, labels, size_average=False)#, weight=cls_wts)
 
-    
+
     loss = torch.sum(loss) / torch.sum(mask) # mean over valid entries
-    
+
     '''
-    if model.training: 
+    if model.training:
         se1 = model.module.super_event
         se2 = model.module.super_event2
         #reg_xy = torch.sum(se1.sigma_x + se1.sigma_y + se2.sigma_x + se2.sigma_y)
@@ -225,11 +228,11 @@ def run_network(model, data, gpu, baseline=False, reg_margin=0):
         reg_xy = F.mse_loss(torch.max(zero, se1.sigma_x-target), zero) + F.mse_loss(torch.max(zero, se1.sigma_y-target), zero) +\
                 F.mse_loss(torch.max(zero, se2.sigma_x-target), zero) + F.mse_loss(torch.max(zero, se2.sigma_y-target), zero)
         reg_t = F.mse_loss(torch.max(zero, se1.sigma_t-target), zero) + F.mse_loss(torch.max(zero, se2.sigma_t-target), zero)
-        #reg_t = F.mse_loss(se1.sigma_t,target) + F.mse_loss(se2.sigma_t,target) 
+        #reg_t = F.mse_loss(se1.sigma_t,target) + F.mse_loss(se2.sigma_t,target)
         #torch.sum(se1.sigma_t + se2.sigma_t)
         r_const = 10
         #sl:%f 10*sim_loss.item()
-        print('\nl:%f rl_xy:%f rl_t:%f rl_xyt:%f margin:%f\n'%(loss.item(), reg_xy.item(), reg_t.item(), 
+        print('\nl:%f rl_xy:%f rl_t:%f rl_xyt:%f margin:%f\n'%(loss.item(), reg_xy.item(), reg_t.item(),
             (0.1*r_const*reg_t + r_const*reg_xy).item(), reg_margin ))
         #print('sl',sim_loss)
         #loss = loss + 0 * sim_loss
@@ -247,15 +250,15 @@ def run_network(model, data, gpu, baseline=False, reg_margin=0):
     #torch.cuda.empty_cache()
     #print(outputs.shape, torch.cuda.max_memory_allocated(device=gpu))
     return outputs, loss, probs, corr/tot
-            
-                
+
+
 
 def train_step(model, gpu, optimizer, dataloader, reg_margin):
     model.train(True)
     tot_loss = 0.0
     error = 0.0
     num_iter = 0.
-    
+
     # Iterate over data.
     tr_apm = APMeter()
     for data in Bar(dataloader):
@@ -263,24 +266,25 @@ def train_step(model, gpu, optimizer, dataloader, reg_margin):
         num_iter += 1
         reg = max(0.4, 0.05 * np.exp(-1*num_iter/500.) + (reg_margin-0.05))
         #if num_iter<200: continue
-        
+
         outputs, loss, probs, err = run_network(model, data, gpu, reg_margin=reg)
         #del outputs
         #print(err, loss)
-        
+
         error += err.item() #data[0]
         tot_loss += loss.item() #data[0]
 
         loss.backward()
         optimizer.step()
         #print(probs.shape, data[2].shape)
-        tr_apm.add(probs.view(-1,probs.shape[-1]).detach().cpu().numpy(), data[2].view(-1,data[2].shape[-1]).cpu().numpy())
+        labels = data[2][:,:,:50]
+        tr_apm.add(probs.view(-1,probs.shape[-1]).detach().cpu().numpy(), labels.view(-1,labels.shape[-1]).cpu().numpy())
     epoch_loss = tot_loss / num_iter
     error = error / num_iter
     print ('train-{} Loss: {:.4f} MAP: {:.4f}'.format(dataloader.root.split('/')[-1], epoch_loss, tr_apm.value().mean())) #error
     tr_apm.reset()
 
-  
+
 
 def val_step(model, gpu, dataloader):
     model.train(False)
@@ -297,27 +301,29 @@ def val_step(model, gpu, dataloader):
     for data in dataloader:
         num_iter += 1
         other = data[3]
-        
+
         outputs, loss, probs, err = run_network(model, data, gpu)
-        apm.add(probs.data.cpu().numpy()[0], data[2].numpy()[0])
-        
+
+        labels = data[2][:,:,:50]
+        apm.add(probs.data.cpu().numpy()[0], labels.numpy()[0])
+
         error += err.item() #data[0]
         tot_loss += loss.item() #data[0]
-        
+
         # post-process preds
         outputs = outputs.squeeze()
         probs = probs.squeeze()
         fps = outputs.size()[1]/other[1][0]
         full_probs[other[0][0]] = (probs.data.cpu().numpy().T, fps)
-        
-        
+
+
     epoch_loss = tot_loss / num_iter
     error = error / num_iter
     #print ('val-map:', apm.value().mean())
     #apm.reset()
     val_map = apm.value().mean()
     print ('val-{} Loss: {:.4f} MAP: {:.4f}'.format(dataloader.root.split('/')[-1], epoch_loss, val_map)) #error
-    #print('mu_x %f, sigma_x %f, mu_t %.10f, sigma_t %f, rho_xy %f'%(model.module.super_event.mu_x[0].item(), model.module.super_event.sigma_x[0].item(), 
+    #print('mu_x %f, sigma_x %f, mu_t %.10f, sigma_t %f, rho_xy %f'%(model.module.super_event.mu_x[0].item(), model.module.super_event.sigma_x[0].item(),
     #    model.module.super_event.mu_t[0].item(), model.module.super_event.sigma_t[0].item(), model.module.super_event.rho_xy[0].item()))
     #print ('LR:%f'%lr)
     #print('conv1 %f, fc1 %f'%(model.module.super_event.conv1.weight[0,0,0,0,0].item(), model.module.super_event.fc1.weight[0,0].item()))
@@ -340,7 +346,7 @@ if __name__ == '__main__':
         model = torch.nn.DataParallel(model)
         #model.load_state_dict(torch.load(args.rgb_model_file)) #model = torch.load(args.rgb_model_file)  #################
         criterion = nn.NLLLoss(reduce=False)
-    
+
         lr = 0.1*batch_size/len(datasets['train'])
         print ('LR:%f'%lr)
         #print(model.parameters())
@@ -349,7 +355,7 @@ if __name__ == '__main__':
         #        print(name, param.data)
         optimizer = optim.Adam(model.parameters(), lr=lr)
         lr_sched = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
-        
+
         run([(model,0,dataloaders,optimizer, lr_sched, args.model_file)], criterion, num_epochs=40)
 
     else:

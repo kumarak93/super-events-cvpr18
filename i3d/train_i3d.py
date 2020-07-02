@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('-mode', type=str, default='rgb', help='rgb or flow')
 #parser.add_argument('-save_model', type=str)
-parser.add_argument('-root', default='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', type=str)
+parser.add_argument('-root', default='', type=str)
 parser.add_argument('-gpu', default='0', type=str)
 
 args = parser.parse_args()
@@ -38,18 +38,19 @@ from charades_dataset_full import Charades as Dataset_Full
 import warnings
 warnings.filterwarnings("ignore")
 
-def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb', train_split='../data/charades.json', batch_size=8): #, save_model=''):
+def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='', #'/nfs/bigdisk/kumarak/datasets/charades/Charades_v1_rgb',
+    train_split='../data/charades.json', batch_size=8, i3d_in = '/data/kumarak_temp/i3d_in'): #, save_model=''):
     # setup dataset
     train_transforms = transforms.Compose([videotransforms.RandomCrop(224),
                                            videotransforms.RandomHorizontalFlip(),
     ])
     test_transforms = transforms.Compose([videotransforms.CenterCrop(224)])
 
-    dataset = Dataset(train_split, 'training', root, mode, train_transforms)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True)
+    dataset = Dataset(train_split, 'training', root, mode, train_transforms, i3d_in=i3d_in)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
 
-    val_dataset = Dataset_Full(train_split, 'testing', root, mode, test_transforms)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=16, pin_memory=True)
+    val_dataset = Dataset_Full(train_split, 'testing', root, mode, test_transforms, i3d_in=i3d_in)
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=8, pin_memory=True)
 
     dataloaders = {'train': dataloader, 'val': val_dataloader}
     datasets = {'train': dataset, 'val': val_dataset}
@@ -68,12 +69,12 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
         state = i3d.state_dict()
         state.update(torch.load('models/rgb_charades.pt'))
         i3d.load_state_dict(state)
-        save_model = 'models/rgb_temp_'
+        save_model = 'models/rgb_temp_nofreeze_'
     i3d.replace_logits(50)
     #i3d.load_state_dict(torch.load('/ssd/models/000920.pt'))
     i3d.cuda()
 
-    i3d.freeze('Mixed_5c')
+    #i3d.freeze('Mixed_5c')
 
     for name, param in i3d.named_parameters():
         if param.requires_grad:print('updating: {}'.format(name))
@@ -99,7 +100,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
         print ('-' * 10)
 
         # Each epoch has a training and validation phase
-        for phase in ['train', 'val']:
+        for phase in ['train']*5+['val']:
             if phase == 'train':
                 i3d.train(True)
                 torch.autograd.set_grad_enabled(True)
@@ -119,7 +120,7 @@ def run(init_lr=0.1, max_steps=64e3, mode='rgb', root='/nfs/bigdisk/kumarak/data
                 num_iter += 1
                 #print(num_iter)
                 # get the inputs
-                inputs, labels, meta = data
+                inputs, labels, meta, _ = data
                 #print(meta)
                 #print(steps, num_iter, inputs.shape, labels.shape) #(B Ch=3 T=64 H=224 W=224) (B C=157 T)
 

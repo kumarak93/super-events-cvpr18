@@ -1,3 +1,4 @@
 *.pyc
 i3d/models/*0.pt
 data/*.npy
+i3d/models/prev

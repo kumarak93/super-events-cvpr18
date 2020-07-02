@@ -9,7 +9,9 @@ import os
 import sys
 from collections import OrderedDict
 
-import attn_t as attn
+#import attn_t as attn
+import attn_xy as attn
+
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 class MaxPool3dSamePadding(nn.MaxPool3d):
@@ -156,14 +158,16 @@ class SkipAttention(nn.Module):
         super(SkipAttention, self).__init__()
 
         self.attn = attn.AttnLayer(N=3, name=name+'_Attn')
-        self.conv = Unit3D(in_channels=in_channels, output_channels=out_channels, kernel_shape=[1, 1, 1], padding=0,
-                         name=name+'_Conv')
+        #self.conv = Unit3D(in_channels=in_channels, output_channels=out_channels, kernel_shape=[1, 1, 1], padding=0,
+        #                 name=name+'_Conv')
         self.name = name
 
     def forward(self, inp):
         x = self.attn(inp)
-        x = self.conv(x)
-        return x
+        #scale = torch.sum(torch.abs(inp[0]))/(torch.sum(torch.abs(x))+1e-6)
+        #scale = torch.norm(inp[0], p=1) / torch.norm(x, p=1)
+        #x = self.conv(inp[0]) #x)
+        return x + inp[0]
 
 
 class InceptionI3d(nn.Module):
@@ -188,17 +192,19 @@ class InceptionI3d(nn.Module):
         'Conv3d_2b_1x1',
         'Conv3d_2c_3x3',
         'MaxPool3d_3a_3x3',
-        #'Skip_Mixed_3', ############
         'Mixed_3b',
+        'Skip_Mixed_3', ############
         'Mixed_3c',
         'MaxPool3d_4a_3x3',
         'Mixed_4b',
         'Mixed_4c',
         'Mixed_4d',
         'Mixed_4e',
+        #'Skip_Mixed_4', ############
         'Mixed_4f',
         'MaxPool3d_5a_2x2',
         'Mixed_5b',
+        #'Skip_Mixed_5', ############
         'Mixed_5c',
         'Logits',
         'Predictions',
@@ -261,17 +267,15 @@ class InceptionI3d(nn.Module):
                                                              padding=0)
         if self._final_endpoint == end_point: return
 
-        #########################
-        '''
-        end_point = 'Skip_Mixed_3'
-        self.end_points[end_point] = SkipAttention(192, 128+192+96+64, name=end_point)
-        if self._final_endpoint == end_point: return
-        '''
-        #########################
-
         end_point = 'Mixed_3b'
         self.end_points[end_point] = InceptionModule(192, [64,96,128,16,32,32], name+end_point)
         if self._final_endpoint == end_point: return
+
+        #########################
+        end_point = 'Skip_Mixed_3'
+        self.end_points[end_point] = SkipAttention(256, 256, name=end_point)
+        if self._final_endpoint == end_point: return
+        #########################
 
         end_point = 'Mixed_3c'
         self.end_points[end_point] = InceptionModule(256, [128,128,192,32,96,64], name+end_point)
@@ -298,6 +302,14 @@ class InceptionI3d(nn.Module):
         self.end_points[end_point] = InceptionModule(128+256+64+64, [112,144,288,32,64,64], name+end_point)
         if self._final_endpoint == end_point: return
 
+        #########################
+        '''
+        end_point = 'Skip_Mixed_4'
+        self.end_points[end_point] = SkipAttention(112+288+64+64, 112+288+64+64, name=end_point)
+        if self._final_endpoint == end_point: return
+        '''
+        #########################
+
         end_point = 'Mixed_4f'
         self.end_points[end_point] = InceptionModule(112+288+64+64, [256,160,320,32,128,128], name+end_point)
         if self._final_endpoint == end_point: return
@@ -310,6 +322,14 @@ class InceptionI3d(nn.Module):
         end_point = 'Mixed_5b'
         self.end_points[end_point] = InceptionModule(256+320+128+128, [256,160,320,32,128,128], name+end_point)
         if self._final_endpoint == end_point: return
+
+        #########################
+        '''
+        end_point = 'Skip_Mixed_5'
+        self.end_points[end_point] = SkipAttention(256+320+128+128, 256+320+128+128, name=end_point)
+        if self._final_endpoint == end_point: return
+        '''
+        #########################
 
         end_point = 'Mixed_5c'
         self.end_points[end_point] = InceptionModule(256+320+128+128, [384,192,384,48,128,128], name+end_point)
@@ -350,10 +370,10 @@ class InceptionI3d(nn.Module):
         x, meta = inp
         for end_point in self.VALID_ENDPOINTS:
             if end_point in self.end_points:
-                if end_point not in ['Skip_Mixed_3']: #, 'MaxPool3d_4a_3x3']:
+                if end_point not in ['Skip_Mixed_3']:#, 'Skip_Mixed_4', 'Skip_Mixed_5']:
                     x = self._modules[end_point](x) # use _modules to work with dataparallel
-                #elif end_point == 'Skip_Mixed_3':
-                #    x_skip = self._modules[end_point]([x, meta])
+                elif end_point in ['Skip_Mixed_3']:#, 'Skip_Mixed_4', 'Skip_Mixed_5']:
+                    x = self._modules[end_point]([x, meta])
                 #elif end_point == 'MaxPool3d_4a_3x3':
                 #    x = self._modules[end_point](x + x_skip)
 
@@ -365,8 +385,16 @@ class InceptionI3d(nn.Module):
         return logits
 
     def get_attn_para(self):
-        attn = self._modules['Skip_Mixed_3'].attn
-        print(torch.tanh(attn.mu_t).detach().cpu().numpy(), torch.sigmoid(attn.sigma_t).detach().cpu().numpy())
+        param = []
+        for layer in ['Skip_Mixed_3']:#, 'Skip_Mixed_4', 'Skip_Mixed_5']:
+            attn = self._modules[layer].attn
+            #param.append((list(torch.tanh(attn.mu_t).detach().cpu().numpy().round(3)),
+            #    list(torch.sigmoid(attn.sigma_t).detach().cpu().numpy().round(3))))
+            param.append((list(torch.tanh(attn.mu_x).detach().cpu().numpy().round(3)),
+                list(torch.tanh(attn.mu_y).detach().cpu().numpy().round(3)),
+                list(torch.sigmoid(attn.sigma_x).detach().cpu().numpy().round(3)),
+                list(torch.sigmoid(attn.sigma_y).detach().cpu().numpy().round(3))))
+        return param
 
     def freeze(self, layer):
         for end_point in self.VALID_ENDPOINTS[:self.VALID_ENDPOINTS.index(layer)+1]:

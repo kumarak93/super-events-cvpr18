@@ -25,20 +25,31 @@ def video_to_tensor(pic):
     return torch.from_numpy(pic.transpose([3,0,1,2]))
 
 
-def load_rgb_frames(image_dir, vid, start, num):
+def load_rgb_frames(image_dir, vid, start, num, i3d_in):
   frames = []
-  for i in range(start, start+num):
-    img = cv2.imread(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'.jpg'))[:, :, [2, 1, 0]]
-    w,h,c = img.shape
-    if w < 226 or h < 226:
-        d = 226.-min(w,h)
-        sc = 1+d/min(w,h)
-        img = cv2.resize(img,dsize=(0,0),fx=sc,fy=sc)
-    img = (img/255.)*2 - 1
-    frames.append(img)
-  return np.asarray(frames, dtype=np.float32)
+  file = os.path.join(i3d_in, vid+'.npy')
+  if os.path.exists(file):
+      frames = np.load(file, allow_pickle=True)[start-1:start-1+num, ...]
+      frames = np.asarray((frames/255.)*2 - 1, dtype=np.float32)
+      #print('file exists: %s'%vid, frames.shape)
+      return frames
+  else:
+      for i in range(start, start+num):
+        img = cv2.imread(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'.jpg'))[:, :, [2, 1, 0]]
+        w,h,c = img.shape
+        if w < 226 or h < 226:
+            d = 226.-min(w,h)
+            sc = 1+d/min(w,h)
+            img = cv2.resize(img,dsize=(0,0),fx=sc,fy=sc)
+        #img = (img/255.)*2 - 1
+        frames.append(img)
+      frames = np.asarray(frames, dtype=np.uint8)
+      #np.save(file, frames)
+      frames = np.asarray((frames/255.)*2 - 1, dtype=np.float32)
+      #print('file does not exists: %s'%vid, frames.shape)
+      return frames
 
-def load_flow_frames(image_dir, vid, start, num):
+def load_flow_frames(image_dir, vid, start, num, i3d_in):
   frames = []
   for i in range(start, start+num):
     imgx = cv2.imread(os.path.join(image_dir, vid, vid+'-'+str(i).zfill(6)+'x.jpg'), cv2.IMREAD_GRAYSCALE)
@@ -58,12 +69,12 @@ def load_flow_frames(image_dir, vid, start, num):
   return np.asarray(frames, dtype=np.float32)
 
 
-def make_dataset(split_file, split, root, mode, num_classes=157):
+def make_dataset(split_file, split, root, mode, i3d_in, num_classes=157):
     dataset = []
     with open(split_file, 'r') as f:
         data = json.load(f)
 
-    pre_data_file = split_file[:-5]+'_'+split+'labeldata.npy'
+    pre_data_file = split_file[:-5]+'_'+split+'labeldata_subset.npy'
     #pre_data_file = split_file[:-5]+'_'+split+'labeldata_64x4.npy'
     #a=[]
     if os.path.exists(pre_data_file):
@@ -81,9 +92,12 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
             if data[vid]['subset'] != split:
                 continue
 
-            if not os.path.exists(os.path.join(root, vid)):
+            #if not os.path.exists(os.path.join(root, vid)):
+            file = os.path.join(i3d_in, vid+'.npy')
+            if not os.path.exists(file):
                 continue
-            num_frames = len(os.listdir(os.path.join(root, vid)))
+            #num_frames = len(os.listdir(os.path.join(root, vid)))
+            num_frames = np.load(file, allow_pickle=True).shape[0]
             if mode == 'flow':
                 num_frames = num_frames//2
 
@@ -109,17 +123,18 @@ def make_dataset(split_file, split, root, mode, num_classes=157):
 
 class Charades(data_utl.Dataset):
 
-    def __init__(self, split_file, split, root, mode, transforms=None):
+    def __init__(self, split_file, split, root, mode, transforms=None, i3d_in=''):
 
         if split == 'training':
             limit = 1000
         elif split == 'testing':
             limit = 500
-        self.data = make_dataset(split_file, split, root, mode)[:limit]
+        self.data = make_dataset(split_file, split, root, mode, i3d_in)[:limit]
         self.split_file = split_file
         self.transforms = transforms
         self.mode = mode
         self.root = root
+        self.i3d_in = i3d_in
 
     def __getitem__(self, index):
         """
@@ -133,16 +148,16 @@ class Charades(data_utl.Dataset):
         start_f = random.randint(1,nf-(64*1+1))
 
         if self.mode == 'rgb':
-            imgs = load_rgb_frames(self.root, vid, start_f, 64*1)
+            imgs = load_rgb_frames(self.root, vid, start_f, 64*1, self.i3d_in)
         else:
-            imgs = load_flow_frames(self.root, vid, start_f, 64*1)
+            imgs = load_flow_frames(self.root, vid, start_f, 64*1, self.i3d_in)
         label = label[:, start_f:start_f+64*1]
 
         imgs = self.transforms(imgs)
 
         meta = np.array([nf,start_f])
 
-        return video_to_tensor(imgs), torch.from_numpy(label), torch.from_numpy(meta)
+        return video_to_tensor(imgs), torch.from_numpy(label), torch.from_numpy(meta), vid
 
     def __len__(self):
         return len(self.data)
